@@ -1,0 +1,81 @@
+name: Multi-platform build
+on: [push, pull_request]
+
+jobs:
+
+  linux-gcc:
+    runs-on: ubuntu-latest
+    env:
+      BUILD_DIR: build-linux-gcc
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build (Linux GCC)
+        run: |
+          ./bootstrap.sh
+          ./.private/ci-build.sh --build-dir "${BUILD_DIR}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-gcc-${{ env.BUILD_DIR }}
+          path: ${{ env.BUILD_DIR }}
+          if-no-files-found: error
+
+  windows-msys2-clang64:
+    runs-on: windows-latest
+    env:
+      BUILD_DIR: build-msys2-clang64
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: clang64
+          update: true
+          install: git mingw-w64-clang-x86_64-cc mingw-w64-clang-x86_64-autotools
+
+      - name: Build (MSYS2 Clang64)
+        run: |
+          ./bootstrap.sh
+          ./.private/ci-build.sh --build-dir "${BUILD_DIR}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-msys2-clang64-${{ env.BUILD_DIR }}
+          path: ${{ env.BUILD_DIR }}
+          if-no-files-found: error
+
+  windows-msvc:
+    runs-on: windows-latest
+    env:
+      BUILD_DIR: build-msvc
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build (Windows MSVC)
+        shell: pwsh
+        run: |
+          msbuild msvc/libusb.sln /m `
+            /property:Configuration=Release `
+            /property:Platform=x64 `
+            /verbosity:minimal
+
+          mkdir ${{ env.BUILD_DIR }}
+          # kopiujemy wszystko z Release (DLL, LIB, EXE itd.)
+          Copy-Item build/v143/x64/Release/* ${{ env.BUILD_DIR }} -Recurse -Force
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-msvc-${{ env.BUILD_DIR }}
+          path: ${{ env.BUILD_DIR }}
+          if-no-files-found: error
