@@ -1,0 +1,142 @@
+name: Multi-platform auto x32/x64 build
+on: [push, pull_request]
+
+jobs:
+
+  linux-gcc:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86, x64]
+
+    env:
+      BUILD_DIR: build-linux-${{ matrix.arch }}
+
+    steps:
+      - name: Pre-upload linux info
+        run: echo "Linux pre-checkout ${{ matrix.arch }}" > pre-linux-${{ matrix.arch }}.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pre-linux-${{ matrix.arch }}
+          path: pre-linux-${{ matrix.arch }}.txt
+
+      - uses: actions/checkout@v3
+
+      - name: Install 32-bit support (only x86)
+        if: matrix.arch == 'x86'
+        run: sudo apt-get update && sudo apt-get install gcc-multilib g++-multilib
+
+      - name: Build (Linux GCC)
+        run: |
+          ./bootstrap.sh
+          if [ "${{ matrix.arch }}" = "x86" ]; then
+            export CFLAGS="-m32"
+            export LDFLAGS="-m32"
+          fi
+          ./.private/ci-build.sh --build-dir "${BUILD_DIR}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}-${{ env.BUILD_DIR }}
+          path: ${{ env.BUILD_DIR }}
+          if-no-files-found: error
+
+
+  windows-msys2:
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        msystem: [clang32, clang64]
+        include:
+          - msystem: clang32
+            arch: x86
+          - msystem: clang64
+            arch: x64
+
+    env:
+      BUILD_DIR: build-msys2-${{ matrix.msystem }}
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Pre-upload msys2 info
+        shell: pwsh
+        run: "Pre msys2 ${{ matrix.msystem }}" | Out-File pre-msys2-${{ matrix.msystem }}.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pre-msys2-${{ matrix.msystem }}
+          path: pre-msys2-${{ matrix.msystem }}.txt
+
+      - uses: actions/checkout@v3
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: true
+          install: |
+            git
+            mingw-w64-${{ matrix.msystem }}-cc
+            mingw-w64-${{ matrix.msystem }}-autotools
+
+      - name: Build (MSYS2 ${{ matrix.msystem }})
+        run: |
+          ./bootstrap.sh
+          ./.private/ci-build.sh --build-dir "${BUILD_DIR}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: msys2-${{ matrix.arch }}-${{ env.BUILD_DIR }}
+          path: ${{ env.BUILD_DIR }}
+          if-no-files-found: error
+
+
+  windows-msvc:
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [Win32, x64]
+
+    env:
+      BUILD_DIR: build-msvc-${{ matrix.arch }}
+
+    steps:
+      - name: Pre-upload msvc info
+        shell: pwsh
+        run: "Pre msvc ${{ matrix.arch }}" | Out-File pre-msvc-${{ matrix.arch }}.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pre-msvc-${{ matrix.arch }}
+          path: pre-msvc-${{ matrix.arch }}.txt
+
+      - uses: actions/checkout@v3
+
+      - name: Build (MSVC)
+        shell: pwsh
+        run: |
+          msbuild msvc/libusb.sln /m `
+            /property:Configuration=Release `
+            /property:Platform=${{ matrix.arch }} `
+            /verbosity:minimal
+
+          mkdir ${{ env.BUILD_DIR }}
+          Copy-Item build/v143/${{ matrix.arch }}/Release/* `
+            ${{ env.BUILD_DIR }} -Recurse -Force
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: msvc-${{ matrix.arch }}-${{ env.BUILD_DIR }}
+          path: ${{ env.BUILD_DIR }}
+          if-no-files-found: error
