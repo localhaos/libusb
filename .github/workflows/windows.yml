@@ -27,11 +27,22 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1.3
-        
+
       - name: Build solution
         run: |
-          msbuild msvc/libusb.sln /m -property:Configuration=${{ matrix.configuration }} -property:Platform=${{ matrix.architecture }}
+          msbuild msvc/libusb.sln /m ^
+            -property:Configuration=${{ matrix.configuration }} ^
+            -property:Platform=${{ matrix.architecture }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          # czytelna nazwa per kombinacja matrix
+          name: libusb-${{ matrix.os }}-${{ matrix.architecture }}-${{ matrix.configuration }}
+          # katalog z wynikami kompilacji dla danej platformy/konfiguracji
+          path: build/v143/${{ matrix.architecture }}/${{ matrix.configuration }}
+          if-no-files-found: error
