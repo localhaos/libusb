@@ -1,4 +1,4 @@
-name: MSYS2 clang64 build
+name: MSYS2 clang64 build2
 on: [push, pull_request]
 
 jobs:
